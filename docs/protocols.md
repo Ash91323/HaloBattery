@@ -184,6 +184,33 @@ Feature request `02 02 00 83`; if there is no reply, the mouse heartbeat is used
 
 ## Mice and keyboards
 
+### AULA F87 Pro
+
+**Connection:** Compx 2.4 GHz receiver (`3554:FA09`), vendor collection `FF02:0002`.
+
+The receiver accepts a 20-byte output report, report id `0x13`. Battery command
+`0x4A`, operation 0 (read), is `13 4A 01 00 00` followed by fourteen zeros and
+checksum `5E`. The matching reply has one packet, index 0 and two payload bytes:
+byte 5 is the percentage and byte 6 is an undecoded status byte. Byte 19 is the
+sum of bytes 0 through 18, modulo 256. Report id, command, fragment fields,
+payload length, checksum and the 0..100 range must all match. Other reports,
+request echoes and error replies are ignored within a bounded wait.
+
+Source: [deepan-alve/womier-l65-linux, `WirelessTransport._packet` and
+`WirelessTransport.battery`](https://github.com/deepan-alve/womier-l65-linux/blob/main/linux/l65ctl.py#L185-L293).
+**Confirmed on an AULA F87 Pro on Windows**, 2026-10-02: the reply
+`13 4A 01 00 02 5F 01 00 00 00 00 00 00 00 00 00 00 00 00 C0` reports 95%.
+This confirms a device-reported level; it has not been compared with the OEM app.
+
+Only that vendor collection and receiver id are queried, with no configuration
+or firmware writes. No wired or Bluetooth protocol is claimed here. A nonzero
+status byte is not enough to infer charging, so charging is not shown. An
+unresponsive keyboard keeps its last level greyed out for at most five minutes;
+unplugging the receiver clears it. Receivers have separate icon keys derived
+from their HID paths (stable across restarts on the same USB port). Since the
+USB id and product name are shared with other keyboards, the default icon name
+is "AULA / Compx keyboard"; other models sharing this id are not hardware-verified.
+
 ### Keychron Ultra-Link 8K, Keychron M5
 
 **Connection:** 2.4 GHz receiver (3434:D028) and USB cable (3434:D048)
