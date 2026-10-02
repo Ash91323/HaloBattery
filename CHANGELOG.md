@@ -9,9 +9,12 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ### Added
 - AULA F87 Pro battery level over its Compx 2.4 GHz receiver (`3554:FA09`),
   confirmed on hardware at 95%. The keyboard gets its own tray icon and works
-  with Percentage in the icon and low battery alerts. The shared receiver id
-  does not identify the model, so the default name is "AULA / Compx keyboard"
-  (Rename can change it). A sleeping keyboard keeps its last reading greyed
+  with Percentage in the icon and low battery alerts. The model is identified
+  automatically using the official driver's read-only `0x05` model query and
+  full six-byte Psd mapping, distinguishing F87 PRO from F87 despite their shared
+  receiver id. F87 PRO identification is hardware-confirmed; the F87 mapping is
+  sourced from the official driver. Unknown or unreadable models retain the
+  generic "AULA / Compx keyboard" name. A sleeping keyboard keeps its last reading greyed
   out for five minutes. Charging flags are not decoded, so no charging state
   is claimed. The read-only battery exchange comes from
   `deepan-alve/womier-l65-linux`, `linux/l65ctl.py`, `WirelessTransport.battery`.
