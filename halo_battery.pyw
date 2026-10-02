@@ -3,6 +3,7 @@
 Supported:
   * Razer (BlackShark V2 Pro headset, mice, Barracuda Pro, etc.): directly over USB/HID, no Synapse
   * Audeze Maxwell (2.4 GHz dongle or USB-C cable)
+  * AULA F87 Pro (Compx 2.4 GHz receiver, battery level only)
   * WLmouse (Beast X / Beast X Max / Mini Pro)
   * Logitech (HID++ 2.0 mice, keyboards and headsets: Lightspeed / Unifying / Bolt receivers, G HUB not needed)
   * SteelSeries (Arctis Nova, Arctis 1 / 7 / 9 / Pro Wireless / 7+ headsets, GameBuds, Aerox mice,
@@ -92,7 +93,7 @@ import updates  # noqa: E402
 import winevents  # noqa: E402
 from providers import hidlist  # noqa: E402
 from providers import (AmInfinityProvider, AstroProvider, AsusProvider,  # noqa: E402
-                       AudezeProvider, BarracudaProvider, BluetoothProvider, CorsairProvider, DeviceStatus,
+                       AudezeProvider, AulaProvider, BarracudaProvider, BluetoothProvider, CorsairProvider, DeviceStatus,
                        EightBitDoProvider,
                        GWolvesProvider, HyperXAlpha2Provider, HyperXCloud3Provider, HyperXProvider, JblProvider,
                        KeychronProvider, LamzuProvider, LofreeProvider, LogitechProvider,
@@ -137,6 +138,7 @@ PROVIDER_LABELS = {
     "astro": "Astro A50",
     "asus": "ASUS ROG / TUF mice",
     "audeze": "Audeze Maxwell",
+    "aula": "AULA / Compx keyboards",
     "barracuda": "Razer Barracuda Pro",
     "corsair": "Corsair headsets",
     "gwolves": "G-Wolves mice",
@@ -166,7 +168,7 @@ def make_providers() -> list:
             JblProvider(), LogitechProvider(), SteelSeriesProvider(), XInputProvider(),
             PlayStationProvider(), EightBitDoProvider(), BarracudaProvider(), NintendoProvider(),
             AsusProvider(), GWolvesProvider(), LofreeProvider(), AstroProvider(), CorsairProvider(),
-            LamzuProvider(), AmInfinityProvider()]
+            LamzuProvider(), AmInfinityProvider(), AulaProvider()]
 
 
 # ---------------------------------------------------------------- config
