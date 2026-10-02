@@ -15,8 +15,11 @@ The status flags are not decoded: a nonzero byte does NOT prove charging.
 No settings, lighting, pairing or firmware commands are sent. Wired USB and
 Bluetooth use different paths and are not probed by this provider.
 
-Several keyboards share this receiver id and its generic USB product name,
-so the icon uses a family name rather than claiming all of them are F87 Pros.
+Model query: AULA's F87 driver (linked in docs/protocols.md), OemDrv.exe
+0040BC25..0040BC2F calls SendCMD_3632 with report 0x13, command 0x05 and
+six response bytes. Dev/kb/*/KB.ini maps the full six-byte Psd to a name.
+The receiver id and USB product string alone cannot identify the model.
+Unknown or unreadable model ids keep a generic family name.
 An unresponsive keyboard keeps its last reading greyed out for five minutes.
 """
 from __future__ import annotations
@@ -33,16 +36,39 @@ from .base import DeviceStatus, Provider, hexdump, log
 VID, PID = 0x3554, 0xFA09
 USAGE_PAGE, USAGE = 0xFF02, 0x0002
 REPORT_ID, CMD_BATTERY, REPORT_LEN = 0x13, 0x4A, 20
+CMD_MODEL = 0x05
 TIMEOUT = 1.5
 READ_MS = 100
 DRAIN_LIMIT = 16
 ASLEEP_KEEP = 300.0
 DEVICE_NAME = "AULA / Compx keyboard"
+MODEL_NAMES = {
+    bytes.fromhex("03 00 00 00 00 8f"): "AULA F87",
+    bytes.fromhex("03 00 00 00 01 0b"): "AULA F87 PRO",
+}
 
 
 def battery_request() -> List[int]:
     packet = [REPORT_ID, CMD_BATTERY, 1, 0, 0] + [0] * 14
     return packet + [sum(packet) & 0xFF]
+
+
+def model_request() -> List[int]:
+    packet = [REPORT_ID, CMD_MODEL, 1, 0, 0] + [0] * 14
+    return packet + [sum(packet) & 0xFF]
+
+
+def parse_model(r) -> Optional[bytes]:
+    """Full Psd from a complete, checksummed single-packet model reply."""
+    if not r or len(r) != REPORT_LEN:
+        return None
+    # The OEM asks for six Psd bytes. This F87 PRO returns ten payload
+    # bytes (the same Psd plus four metadata bytes); accept both layouts.
+    if list(r[:4]) != [REPORT_ID, CMD_MODEL, 1, 0] or r[4] not in (6, 10):
+        return None
+    if (sum(r[:19]) & 0xFF) != r[19]:
+        return None
+    return bytes(r[5:11])
 
 
 def parse_battery(r) -> Optional[Tuple[int, int]]:
@@ -68,35 +94,49 @@ class AulaProvider(Provider):
 
     def __init__(self):
         self._diag: List[str] = []
-        self._last: Dict[str, Tuple[int, float]] = {}
+        self._last: Dict[str, Tuple[int, str, float]] = {}
 
-    def _read(self, path) -> Optional[int]:
+    def _query(self, dev, request, parser, label):
+        # Bound the drain even while another app is sending vendor traffic.
+        for _ in range(DRAIN_LIMIT):
+            if not dev.read(REPORT_LEN, 1):
+                break
+        else:
+            self._diag.append(f"    queued reports did not drain; {label} query deferred")
+            return None
+        if dev.write(request) != len(request):
+            self._diag.append(f"    {label} request was not accepted")
+            return None
+        deadline = time.monotonic() + TIMEOUT
+        while time.monotonic() < deadline:
+            ms = max(1, min(READ_MS, int((deadline - time.monotonic()) * 1000)))
+            reply = dev.read(REPORT_LEN, ms)
+            parsed = parser(reply)
+            if parsed is not None:
+                self._diag.append(f"    {label} reply: {hexdump(reply)}")
+                return parsed
+        self._diag.append(f"    no valid {label} reply (keyboard off or asleep, or unsupported)")
+        return None
+
+    def _read(self, path) -> Optional[Tuple[int, str]]:
         dev = hid.device()
         try:
             dev.open_path(path)
-            # Discard queued reports before asking, but bound the drain even
-            # while another app is sending traffic on this vendor collection.
-            for _ in range(DRAIN_LIMIT):
-                if not dev.read(REPORT_LEN, 1):
-                    break
-            else:
-                self._diag.append("    queued reports did not drain; battery query deferred")
+            battery = self._query(dev, battery_request(), parse_battery, "battery")
+            if battery is None:
                 return None
-            request = battery_request()
-            if dev.write(request) != len(request):
-                self._diag.append("    battery request was not accepted")
-                return None
-            deadline = time.monotonic() + TIMEOUT
-            while time.monotonic() < deadline:
-                ms = max(1, min(READ_MS, int((deadline - time.monotonic()) * 1000)))
-                reply = dev.read(REPORT_LEN, ms)
-                parsed = parse_battery(reply)
-                if parsed is not None:
-                    level, status = parsed
-                    self._diag.append(f"    reply: {hexdump(reply)} -> {level}% "
-                                      f"(status 0x{status:02x}, charging unknown)")
-                    return level
-            self._diag.append("    no valid battery reply (keyboard off or asleep, or unsupported)")
+            level, status = battery
+            self._diag.append(f"    {level}% (status 0x{status:02x}, charging unknown)")
+            # Re-query each successful poll: another keyboard may have been
+            # paired to the same receiver since the previous reading.
+            model = None
+            try:
+                model = self._query(dev, model_request(), parse_model, "model")
+            except (OSError, ValueError) as e:
+                self._diag.append(f"    model HID: {e}")
+            name = MODEL_NAMES.get(model, DEVICE_NAME)
+            self._diag.append(f"    model {model.hex(' ') if model is not None else 'unavailable'}: {name}")
+            return level, name
         except (OSError, ValueError) as e:
             self._diag.append(f"    HID: {e}")
         finally:
@@ -128,17 +168,18 @@ class AulaProvider(Provider):
                 continue
             present.add(key)
             self._diag.append(f"[AULA / Compx] receiver {VID:04x}:{PID:04x} [{key}]")
-            level = self._read(path)
+            reading = self._read(path)
             now = time.monotonic()
-            if level is not None:
-                self._last[key] = (level, now)
-                out.append(DeviceStatus(key, DEVICE_NAME, level, False, True, self.name,
+            if reading is not None:
+                level, name = reading
+                self._last[key] = (level, name, now)
+                out.append(DeviceStatus(key, name, level, False, True, self.name,
                                         kind="keyboard"))
             elif key in self._last:
-                last_level, seen = self._last[key]
+                last_level, last_name, seen = self._last[key]
                 if now - seen < ASLEEP_KEEP:
                     self._diag.append(f"    keeping last {last_level}% greyed out")
-                    out.append(DeviceStatus(key, DEVICE_NAME, last_level, False, False,
+                    out.append(DeviceStatus(key, last_name, last_level, False, False,
                                             self.name, kind="keyboard"))
                 else:
                     del self._last[key]
