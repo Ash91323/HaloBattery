@@ -207,9 +207,38 @@ or firmware writes. No wired or Bluetooth protocol is claimed here. A nonzero
 status byte is not enough to infer charging, so charging is not shown. An
 unresponsive keyboard keeps its last level greyed out for at most five minutes;
 unplugging the receiver clears it. Receivers have separate icon keys derived
-from their HID paths (stable across restarts on the same USB port). Since the
-USB id and product name are shared with other keyboards, the default icon name
-is "AULA / Compx keyboard"; other models sharing this id are not hardware-verified.
+from their HID paths (stable across restarts on the same USB port).
+
+The shared USB id and product string do not identify the keyboard. After each
+successful battery read, command `0x05` asks for the model's full six-byte `Psd`:
+`13 05 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 19`.
+Only checksummed, single-packet replies with six or ten payload bytes are accepted.
+The first six payload bytes select a name; the extra four bytes in the observed
+ten-byte response are not interpreted. Unknown ids or a failed model query use
+"AULA / Compx keyboard" and still show a valid battery. The query runs again on
+each successful poll so changing the keyboard paired to a receiver cannot retain
+a previously identified model. A sleeping device keeps its last name with its
+greyed-out reading until expiry or unplugging.
+
+Model source: the **F87/F87 Pro** download on [AULA's driver page](https://www.aulagaming.com/pages/download),
+[AULA_F87_Software.exe](https://cdn.shopify.com/s/files/1/0695/6987/1965/files/AULA_F87_Software.exe?v=1756176168),
+extracted without running the installer or firmware updater. Installer SHA-256:
+`a91db0e84dd6e677aaa1701a6c4851e71131b561815909aacfc6f8679d20fdee`.
+`OemDrv.exe` SHA-256: `c46e6cad5ad85addbaef4975d27721719aa567bcb27582312b797a7108ec5a38`.
+At `0040BC25..0040BC2F`, its wireless watcher calls `SendCMD_3632` (`00484530`)
+with report id `0x13`, command `0x05`, and an output buffer of six bytes.
+Its `Dev/kb/*/KB.ini` files supply these exact hexadecimal mappings:
+
+| Full Psd | Name | Driver configuration |
+|---|---|---|
+| `03 00 00 00 00 8F` | AULA F87 | `Dev/kb/1/KB.ini` |
+| `03 00 00 00 01 0B` | AULA F87 PRO | `Dev/kb/F87PRO/KB.ini` |
+
+**Confirmed on the user's F87 PRO**, 2026-10-02:
+`13 05 01 00 0A 03 00 00 00 01 0B 01 00 00 00 00 00 00 00 33`.
+This identifies AULA F87 PRO without a saved Rename preference. F87's mapping
+comes from the official driver; its battery exchange has not been hardware-tested.
+Other AULA models are not inferred from this receiver id.
 
 ### Keychron Ultra-Link 8K, Keychron M5
 
