@@ -6,6 +6,16 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- AULA F87 Pro battery level over its Compx 2.4 GHz receiver (`3554:FA09`),
+  confirmed on hardware at 95%. The keyboard gets its own tray icon and works
+  with Percentage in the icon and low battery alerts. The shared receiver id
+  does not identify the model, so the default name is "AULA / Compx keyboard"
+  (Rename can change it). A sleeping keyboard keeps its last reading greyed
+  out for five minutes. Charging flags are not decoded, so no charging state
+  is claimed. The read-only battery exchange comes from
+  `deepan-alve/womier-l65-linux`, `linux/l65ctl.py`, `WirelessTransport.battery`.
+
 ## [1.13.0] - 2026-09-29
 
 A new Windows 11 style tray menu and a batch of tray features: turn device types off,
