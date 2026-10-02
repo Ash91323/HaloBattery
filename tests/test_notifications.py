@@ -24,7 +24,7 @@ class TextTests(unittest.TestCase):
         self.assertIn("Download v1.2.3…", hb.update_text("1.2.3"))
 
     def test_real_low_battery_alert_uses_the_shared_text(self):
-        app = make_app({"low": 20})
+        app = make_app({"low": 20, "quiet_fullscreen": False})
         with mock.patch.object(hb, "DeviceIcon", __import__("test_hide_rename").FakeIcon):
             app.apply([dev(level=10)])
         self.assertEqual(app.notes, [hb.low_battery_text("G502 LIGHTSPEED", 10, False)])
