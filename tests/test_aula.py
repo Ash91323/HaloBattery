@@ -12,6 +12,18 @@ from providers import aula as A
 
 CAPTURE = bytes.fromhex("13 4A 01 00 02 5F 01 00 00 00 00 00 00 00 00 00 00 00 00 C0")
 REQUEST = bytes.fromhex("13 4A 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 5E")
+MODEL_CAPTURE = bytes.fromhex("13 05 01 00 0A 03 00 00 00 01 0B 01 00 00 00 00 00 00 00 33")
+MODEL_REQUEST = bytes.fromhex("13 05 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 19")
+
+
+def model_reply(psd="03 00 00 00 01 0b", length=10):
+    data = list(MODEL_CAPTURE)
+    data[4] = length
+    data[5:11] = bytes.fromhex(psd)
+    if length == 6:
+        data[11:19] = [0] * 8
+    data[19] = sum(data[:19]) & 255
+    return data
 
 
 def reply(level=95, status=1, **fields):
@@ -35,10 +47,12 @@ def entries(prefix=b"receiver", **fields):
 
 
 class FakeDevice:
-    def __init__(self, clock, replies=(), stale=(), error=None, write_count=20, noise=False):
+    def __init__(self, clock, replies=(), stale=(), error=None, write_count=20, noise=False,
+                 model_replies=()):
         self.clock, self.replies, self.queue = clock, list(replies), list(stale)
         self.error, self.write_count, self.noise = error, write_count, noise
         self.opened, self.closed, self.writes, self.reads = [], 0, [], 0
+        self.model_replies = list(model_replies)
 
     def open_path(self, path):
         self.opened.append(path)
@@ -49,7 +63,12 @@ class FakeDevice:
         self.writes.append(list(data))
         if self.error == "write":
             raise OSError("write failed")
-        self.queue.extend(self.replies)
+        if data[1] == A.CMD_MODEL:
+            if self.error == "model":
+                raise OSError("model query failed")
+            self.queue.extend(self.model_replies)
+        else:
+            self.queue.extend(self.replies)
         return self.write_count
 
     def read(self, n, timeout):
@@ -66,6 +85,25 @@ class FakeDevice:
 
 
 class ParseTests(unittest.TestCase):
+    def test_model_capture_and_oem_six_byte_layout(self):
+        self.assertEqual(bytes(A.model_request()), MODEL_REQUEST)
+        for data in (MODEL_CAPTURE, model_reply(length=6)):
+            self.assertEqual(A.parse_model(data), bytes.fromhex("03 00 00 00 01 0b"))
+
+    def test_invalid_model_frames_are_rejected(self):
+        for data in (None, [], MODEL_CAPTURE[:-1], MODEL_CAPTURE + b"\0", REQUEST,
+                     MODEL_REQUEST, CAPTURE, bytes(20)):
+            self.assertIsNone(A.parse_model(data))
+        for offset, value in [(0, 0x08), (1, 0x85), (2, 2), (3, 1),
+                              (4, 0), (4, 5), (4, 7), (4, 14), (4, 0x1a)]:
+            data = list(MODEL_CAPTURE)
+            data[offset] = value
+            data[19] = sum(data[:19]) & 255
+            self.assertIsNone(A.parse_model(data))
+        corrupt = list(MODEL_CAPTURE)
+        corrupt[5] ^= 1
+        self.assertIsNone(A.parse_model(corrupt))
+
     def test_captured_f87_pro_reply(self):
         self.assertEqual(A.parse_battery(CAPTURE), (95, 1))
 
@@ -110,13 +148,13 @@ class PollTests(unittest.TestCase):
         self.devices.append(dev)
         return dev
 
-    def test_hardware_reply_becomes_a_keyboard_and_sends_only_the_battery_query(self):
+    def test_hardware_reply_queries_battery_and_model_without_guessing_the_name(self):
         dev = self.device(replies=[CAPTURE])
         st, = self.provider.poll()
         self.assertEqual((st.name, st.level, st.source, st.kind, st.online, st.charging),
                          (A.DEVICE_NAME, 95, "aula", "keyboard", True, False))
         self.assertEqual(dev.opened, [self.infos[-1]["path"]])
-        self.assertEqual(dev.writes, [list(REQUEST)])
+        self.assertEqual(dev.writes, [list(REQUEST), list(MODEL_REQUEST)])
         self.assertEqual(dev.closed, 1)
         self.assertIn("charging unknown", "\n".join(self.provider.diagnostics()))
 
@@ -132,7 +170,56 @@ class PollTests(unittest.TestCase):
         self.infos.append(dict(self.infos[-1]))
         dev = self.device(replies=[CAPTURE])
         self.assertEqual(len(self.provider.poll()), 1)
-        self.assertEqual(len(dev.writes), 1)
+        self.assertEqual(dev.writes, [list(REQUEST), list(MODEL_REQUEST)])
+
+    def test_captured_psd_automatically_identifies_f87_pro(self):
+        self.device(replies=[CAPTURE], model_replies=[MODEL_CAPTURE])
+        st, = self.provider.poll()
+        self.assertEqual((st.name, st.level), ("AULA F87 PRO", 95))
+        self.assertIn("03 00 00 00 01 0b", "\n".join(self.provider.diagnostics()))
+
+    def test_f87_and_f87_pro_on_identical_receivers_have_distinct_names(self):
+        self.infos += entries(prefix=b"receiver-two")
+        self.device(replies=[CAPTURE], model_replies=[model_reply("03 00 00 00 00 8f")])
+        self.device(replies=[reply(40)], model_replies=[MODEL_CAPTURE])
+        first, second = self.provider.poll()
+        self.assertEqual((first.name, second.name), ("AULA F87", "AULA F87 PRO"))
+        self.assertNotEqual(first.key, second.key)
+
+    def test_unknown_full_model_ids_never_inherit_f87_pro_name(self):
+        for psd in ("03 00 00 00 03 66", "04 00 00 00 01 0b", "00 00 00 00 00 00"):
+            self.device(replies=[CAPTURE], model_replies=[model_reply(psd)])
+            self.assertEqual(self.provider.poll()[0].name, A.DEVICE_NAME)
+
+    def test_model_timeout_or_io_error_preserves_a_valid_battery(self):
+        for error in (None, "model"):
+            self.device(replies=[CAPTURE], error=error)
+            st, = self.provider.poll()
+            self.assertEqual((st.name, st.level, st.online), (A.DEVICE_NAME, 95, True))
+
+    def test_model_query_discards_stale_and_unrelated_reports(self):
+        self.device(replies=[CAPTURE, MODEL_CAPTURE],
+                    model_replies=[CAPTURE, MODEL_REQUEST, model_reply("03 00 00 00 00 8f")])
+        self.assertEqual(self.provider.poll()[0].name, "AULA F87")
+
+    def test_model_is_requeried_and_not_cached_across_receiver_pairing_changes(self):
+        for model, name in ((MODEL_CAPTURE, "AULA F87 PRO"),
+                            (model_reply("03 00 00 00 00 8f"), "AULA F87"),
+                            (model_reply("03 00 00 00 03 66"), A.DEVICE_NAME)):
+            self.device(replies=[CAPTURE], model_replies=[model])
+            self.assertEqual(self.provider.poll()[0].name, name)
+
+    def test_sleep_keeps_identified_name_but_unplug_clears_it(self):
+        self.device(replies=[CAPTURE], model_replies=[MODEL_CAPTURE])
+        self.provider.poll()
+        self.device()
+        st, = self.provider.poll()
+        self.assertEqual((st.name, st.online), ("AULA F87 PRO", False))
+        self.infos = []
+        self.provider.poll()
+        self.infos = entries()
+        self.device(replies=[CAPTURE])
+        self.assertEqual(self.provider.poll()[0].name, A.DEVICE_NAME)
 
     def test_stale_queued_battery_is_discarded_before_the_request(self):
         self.device(stale=[CAPTURE], replies=[reply(80)])
