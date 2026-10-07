@@ -105,7 +105,7 @@ class UpdaterTests(unittest.TestCase):
             self.assertEqual((backup / "HaloBattery.exe").read_bytes(), b"MZold")
             for name in ("portable.txt", "config.json", "history.json"):
                 self.assertEqual((target / name).read_text(), "preserve")
-            launch.assert_called_once_with(target / "HaloBattery.exe")
+            launch.assert_called_once_with((target / "HaloBattery.exe").resolve())
 
     def test_startup_failure_restores_both_old_paths_and_restarts(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -126,7 +126,7 @@ class UpdaterTests(unittest.TestCase):
             self.bundle(package, b"new")
             replace = U.os.replace
             def fail(source, dest):
-                if Path(source) == target / "_internal":
+                if Path(source).resolve() == (target / "_internal").resolve():
                     raise PermissionError("locked DLL")
                 return replace(source, dest)
             with mock.patch.object(U.os, "replace", side_effect=fail), self.assertRaises(PermissionError):
