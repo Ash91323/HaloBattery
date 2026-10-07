@@ -275,7 +275,29 @@ The reply reports **77%**; it has not been compared with the OEM app.
 Only complete, checksummed replies with a percentage from 0 to 100 are accepted.
 A byte-for-byte request echo is ignored: an all-zero payload cannot distinguish
 an echo from 0%, so that ambiguous frame supplies no reading. Unrelated and
-stale frames are discarded within bounded drain/read loops. Charging is unknown.
+stale frames are discarded within bounded drain/read loops. No charging flag
+has been confirmed. The provider instead estimates charging from two distinct
+rising battery updates, totaling at least two percentage points within 15 minutes.
+Equal readings do not accumulate evidence or extend the estimate. A drop, 100%,
+unavailable reading, receiver removal, or a polling gap longer than ten minutes
+resets the trend. Five minutes without a further rise expires an active estimate;
+two fresh rises are then required to resume. Restarting also starts fresh.
+Cable insertion is detected only after rising levels, and cable removal can lag
+by five minutes plus a poll interval if the level stays flat. The tooltip says
+`charging (estimated)` and status JSON has `charging_estimated: true`; the exact
+battery percentage remains available for percentage icons. Voltage/percentage
+recalibration can still cause a false positive; a single jump cannot activate it.
+On 2026-10-08 the user confirmed charging from a wall adapter, then unplugged
+the cable: both queries returned the exact same 32-byte `20 01 00 4D ... 6E`
+reply. Byte 2 remained zero; it cannot be used to distinguish these states.
+Static inspection of this driver's `DeviceDriver.exe` at `00435862..004358A1`
+also finds the same battery query and a call to `MUI::BatteryCtrl::SetBatteryInfo`
+with the percentage from offset 3 and a constant zero second argument. No
+separate charging query is evidenced by that battery path. Adapter power is not
+a Windows USB endpoint, so USB presence cannot provide a fallback here.
+Passive listening on the two vendor collections on 2026-10-08 saw no distinct
+charging report, but did see live battery frames rise from 77% to 78% while the
+user confirmed adapter charging. No speculative commands were sent to interface 4.
 A sleeping keyboard retains its last value greyed out for five minutes; unplugging
 the receiver clears it immediately.
 
@@ -373,8 +395,17 @@ Replies must match the RACE family and transaction sequence.
 
 Local hardware returned `02 11 50 49 01 d8 fb f2 10 00 07 00 06 82 00 af 0e 00 00`:
 3759 mV. The tray labels the voltage-derived level as approximate (`~22%`).
-The Li-ion curve is only an estimate, especially while connected to a charger;
-this provider does not infer charging from voltage. No response gives an unknown,
+The Li-ion curve is only an estimate, especially while connected to a charger.
+Charging is also estimated, using the reference implementation's seven samples
+350 ms apart: a spread of at least 12 mV or a minimum of at least 4180 mV starts
+the green breathing animation. Require all seven valid samples; an incomplete
+window supplies any valid level but does not claim charging. Each poll starts a
+new window without cached charging state. This heuristic can misclassify voltage
+changes and is not an explicit charging flag; full batteries may keep breathing
+while connected. Local user-confirmed charging samples on 2026-10-08 were
+`3837, 3840, 3870, 4110, 4107, 4098, 4077` mV (spread 273 mV), versus
+`3762, 3762, 3762, 3762, 3765, 3762, 3765` mV unplugged (spread 3 mV).
+No response gives an unknown,
 offline state; no stale level is passed off as current. Only PID 0550 is enabled.
 
 Protocol and approximate discharge curve reference:

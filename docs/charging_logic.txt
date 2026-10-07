@@ -1,0 +1,45 @@
+// Barracuda X 耳機充電判斷：偽程式碼
+// 電壓單位：mV；這是電壓推估，非硬體充電旗標。
+
+function isCharging() {
+    samples = [];
+
+    for (i = 0; i < 7; i++) {
+        if (i > 0) {
+            sleep(0.35); // 秒
+        }
+
+        voltage = readVoltage();
+
+        if (voltage != null && voltage >= 2500 && voltage <= 4500) {
+            samples.push(voltage);
+        }
+    }
+
+    if (samples.length < 7) {
+        return false;
+    }
+
+    minVoltage = min(samples);
+    maxVoltage = max(samples);
+
+    if (maxVoltage - minVoltage >= 12) {
+        return true;
+    } else if (minVoltage >= 4180) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+while (appRunning) {
+    charging = isCharging();
+
+    if (charging && animationEnabled) {
+        startGreenBreathing();
+    } else {
+        stopGreenBreathing();
+    }
+
+    sleep(pollInterval);
+}

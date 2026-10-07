@@ -736,12 +736,14 @@ def device_state(st: DeviceStatus, left: str = "") -> str:
     """The part of describe() after the name: "85%, charging", "no link ..."."""
     if st.approx:
         state = i18n.status_text(st.approx)          # XInput: coarse levels or "not reported yet", never a fake "NN%"
+        if st.charging and st.charging_estimated:
+            state += tr(", charging (estimated)")
     elif st.level is None:
         state = tr("no link (off or asleep)")
     else:
         state = f"{st.level}%"
         if st.charging:
-            state += tr(", charging")
+            state += tr(", charging (estimated)" if st.charging_estimated else ", charging")
         if not st.online:
             state += tr(" (last known value, device asleep)")
         elif left and not st.charging:
@@ -1780,6 +1782,7 @@ class App:
                 "name": self.display_name(st),
                 "level": st.level,
                 "charging": st.charging,
+                "charging_estimated": st.charging_estimated,
                 "online": st.online,
                 "kind": self.pictogram(st),
                 "approx": st.approx or None,

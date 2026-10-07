@@ -24,7 +24,7 @@ Levels are read over USB/HID (a dongle, a receiver or a cable), from Xbox-style 
 | [ASUS ROG Gladius III Aimpoint and other ROG / TUF wireless mice (list in `providers/asus.py`)](docs/protocols.md#asus-rog-gladius-iii-aimpoint-and-other-rog--tuf-wireless-mice) | 2.4 GHz receiver or USB cable | no |
 | [Audeze Maxwell](docs/protocols.md#audeze-maxwell) | 2.4 GHz dongle or USB-C cable | yes |
 | [AULA F87 Pro](docs/protocols.md#aula-f87-pro) | 2.4 GHz receiver (battery level and automatic model name; no charging state) | yes |
-| [AULA NOVA75](docs/protocols.md#aula-nova75) | 2.4 GHz receiver (battery level; no charging state) | yes |
+| [AULA NOVA75](docs/protocols.md#aula-nova75) | 2.4 GHz receiver (battery level; charging estimated from rising levels) | yes |
 | [Bluetooth devices, tested on the 1MORE SonoFlow headset (users also report Audio-Technica and JBL Tune 760NC headphones working)](docs/protocols.md#bluetooth-devices-tested-on-the-1more-sonoflow-headset) | Bluetooth (on by default, can be turned off in the menu) | yes |
 | [Corsair Dark Core RGB Pro SE](docs/protocols.md#corsair-dark-core-rgb-pro-se) | 2.4 GHz dongle | no |
 | [Corsair Void v2 Wireless, Virtuoso Max Wireless, HS80 Max Wireless](docs/protocols.md#corsair-void-v2-wireless-virtuoso-max-wireless-hs80-max-wireless) | Wireless receiver | no |
@@ -45,7 +45,7 @@ Levels are read over USB/HID (a dongle, a receiver or a cable), from Xbox-style 
 | [MCHOSE M7 Ultra](docs/protocols.md#mchose-m7-ultra) | 2.4 GHz receiver | yes |
 | [Nintendo Switch Pro Controller, Joy-Con (L) / (R)](docs/protocols.md#nintendo-switch-pro-controller-joy-con-l--r) | Bluetooth | no |
 | [Pulsar X2 V2 Mini, ATK VXE R1 SE+, VXE R1 Pro Max](docs/protocols.md#pulsar-x2-v2-mini-atk-vxe-r1-se-vxe-r1-pro-max) | 2.4 GHz dongle and USB cable | yes |
-| Razer Barracuda X (2022, receiver `1532:0550`) | 2.4 GHz dongle | estimated from voltage; charging not reported |
+| Razer Barracuda X (2022, receiver `1532:0550`) | 2.4 GHz dongle | level and charging estimated from voltage |
 | [Razer Barracuda Pro (2.4 GHz)](docs/protocols.md#razer-barracuda-pro-24-ghz) | 2.4 GHz dongle | yes |
 | [Razer Basilisk V3 Pro, Razer Basilisk Ultimate (tested by users)](docs/protocols.md#razer-basilisk-v3-pro-razer-basilisk-ultimate) | 2.4 GHz receiver | yes |
 | [Razer BlackShark V2 Pro (2023)](docs/protocols.md#razer-blackshark-v2-pro-2023) | 2.4 GHz receiver | yes |
@@ -102,6 +102,11 @@ Windows SmartScreen may warn about an unrecognized app on first launch, because 
 - **Colour**: follows the taskbar (white on a dark bar, black on a light one). With [MyDockFinder](https://store.steampowered.com/app/1787090/MyDockFinder/) running it follows its top menu bar instead. With a transparent taskbar (e.g. TranslucentTB) pick **Icon colour → White** or **Black**.
 - **Amber**: close to the alert threshold. **Red**: at or below it.
 - **Green and breathing**: charging - the animation can be turned off in the menu, leaving a plain green arc.
+  NOVA75 estimates charging after two rising battery updates within 15 minutes;
+  its tooltip labels this as estimated. A decrease, missing reading, 100% level,
+  or five minutes without another rise stops the estimate. Plugging in does not
+  trigger it immediately, and unplugging may take up to five minutes plus a poll
+  to clear. A restart requires fresh rising readings.
 - **Translucent**: the mouse is asleep and keeps its last level for 5 minutes. A device that is switched off leaves the tray and comes back when it is switched on.
 
 The low battery notification fires once, and again only after the device has been charged.
@@ -126,7 +131,7 @@ Right-click a device icon to open its menu. It looks like a Windows 11 menu (acr
   - **Quiet while gaming** (on by default): while a game or other app is full screen (the same signal Windows uses to hold its own notifications), alerts are held and shown once it closes - one per device, and a low battery alert is dropped if the device was put on the charger meanwhile. Devices are polled only every 5 minutes then, since every poll talks to them; plugging something in still updates at once.
   - **Windows Bluetooth devices**, **Device pictogram**, **Percentage in the icon** (the level as a number in the ring instead of the pictogram, amber or red when low), **Charging animation**
   - **PlayStation full mode (Bluetooth)** (off by default): always read the battery of a PS4 / PS5 controller over Bluetooth. Some games stop seeing the controller in that mode until it is turned off and on
-  - **Status file for other apps** (off by default): writes `%APPDATA%\HaloBattery\status.json` after every poll, for Rainmeter, a Stream Deck plugin or a script. Each device has `name`, `level`, `charging`, `online`, `kind`, `seconds_left` and the tooltip `text`; `running` turns false when the app exits, and `updated_unix` says how fresh it is. Turning it off deletes the file.
+  - **Status file for other apps** (off by default): writes `%APPDATA%\HaloBattery\status.json` after every poll, for Rainmeter, a Stream Deck plugin or a script. Each device has `name`, `level`, `charging`, `charging_estimated`, `online`, `kind`, `seconds_left` and the tooltip `text`; `running` turns false when the app exits, and `updated_unix` says how fresh it is. Turning it off deletes the file.
   - **Device types**: turn off a brand or device family; its devices are then not opened at all
   - **Icon colour**: Automatic (the Windows theme, or MyDockFinder's menu bar while it is running), White or Black
   - **Start with Windows** (per-user registry key, no admin rights needed)

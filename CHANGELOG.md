@@ -7,6 +7,16 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- AULA NOVA75 automatic charging estimate from two rising battery updates within
+  15 minutes, with a green breathing icon and an explicitly estimated tooltip.
+  The estimate clears on decreasing/full battery, unavailable readings, receiver
+  removal, or five minutes without another rise. The receiver has no confirmed
+  charging flag, so cable insertion/removal is not immediately detectable.
+- Razer Barracuda X 2022 (`1532:0550`) charging animation using seven battery
+  voltage samples per poll, following the protocol reference's voltage-spread
+  heuristic. Confirmed against the user's plugged/unplugged headset; charging
+  is an estimate, not a device-reported flag. Incomplete samples do not claim
+  charging, and each poll uses fresh samples so unplugging clears the animation.
 - Personal releases from `Ash91323/HaloBattery`: push to `main` automatically
   selects the next patch version, runs tests, builds the Windows ZIP and publishes
   a release. The packaged app can download, verify and install it from the tray,

@@ -82,6 +82,7 @@ ZH_TW = {
     "Xbox-compatible controllers": "Xbox 相容控制器",
     "no link (off or asleep)": "未連線（已關機或休眠）",
     ", charging": "，充電中",
+    ", charging (estimated)": "，充電中（推估）",
     " (last known value, device asleep)": "（上次讀取的電量，裝置休眠中）",
     ", {left}": "，{left}",
     "Low battery": "電量不足",

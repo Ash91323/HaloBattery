@@ -76,6 +76,69 @@ class PacketTests(unittest.TestCase):
         self.assertIsNone(N.parse_battery(reply(0)))
 
 
+class ChargingTrendTests(unittest.TestCase):
+    def test_two_distinct_rises_start_charging(self):
+        trend = N.ChargingTrend(77, 0)
+        self.assertFalse(trend.update(78, 15))
+        self.assertFalse(trend.update(78, 30))
+        self.assertTrue(trend.update(79, 45))
+        self.assertTrue(trend.update(79, 60))
+
+    def test_single_jump_and_confirmations_do_not_claim_charging(self):
+        trend = N.ChargingTrend(77, 0)
+        self.assertFalse(trend.update(90, 15))
+        for now in (30, 60, 300, 600):
+            self.assertFalse(trend.update(90, now))
+
+    def test_declining_level_clears_and_reanchors(self):
+        trend = N.ChargingTrend(77, 0)
+        trend.update(78, 15)
+        self.assertTrue(trend.update(79, 30))
+        self.assertFalse(trend.update(78, 45))
+        self.assertFalse(trend.update(79, 60))
+        self.assertTrue(trend.update(80, 75))
+
+    def test_flat_level_expires_and_cannot_rearm_without_new_rises(self):
+        trend = N.ChargingTrend(77, 0)
+        trend.update(78, 15)
+        trend.update(79, 30)
+        self.assertTrue(trend.update(79, 30 + N.CHARGE_HOLD - 1))
+        self.assertFalse(trend.update(79, 30 + N.CHARGE_HOLD))
+        self.assertFalse(trend.update(79, 345))
+        self.assertFalse(trend.update(80, 360))
+        self.assertTrue(trend.update(81, 375))
+
+    def test_fresh_rise_extends_hold(self):
+        trend = N.ChargingTrend(77, 0)
+        trend.update(78, 15)
+        trend.update(79, 30)
+        self.assertTrue(trend.update(80, 300))
+        self.assertTrue(trend.update(80, 330))
+        self.assertFalse(trend.update(80, 300 + N.CHARGE_HOLD))
+
+    def test_full_battery_and_long_gap_do_not_claim_charging(self):
+        for level, now in ((100, 45), (80, 30 + N.CHARGE_MAX_GAP + 1), (80, 10)):
+            trend = N.ChargingTrend(77, 0)
+            trend.update(78, 15)
+            trend.update(79, 30)
+            self.assertFalse(trend.update(level, now))
+
+    def test_rises_outside_window_and_noisy_sawtooth_do_not_accumulate(self):
+        trend = N.ChargingTrend(77, 0)
+        for level, now in ((78, 15), (78, 500), (78, 900), (79, 1000)):
+            self.assertFalse(trend.update(level, now))
+        trend = N.ChargingTrend(77, 0)
+        for i, level in enumerate((78, 77, 78, 77, 78)):
+            self.assertFalse(trend.update(level, (i + 1) * 15))
+
+    def test_five_minute_poll_setting_can_detect_rises(self):
+        trend = N.ChargingTrend(77, 0)
+        self.assertFalse(trend.update(78, 305))
+        self.assertTrue(trend.update(79, 610))
+        self.assertTrue(trend.update(80, 915))
+        self.assertFalse(trend.update(80, 1220))
+
+
 class PollTests(unittest.TestCase):
     def setUp(self):
         self.clock, self.devices, self.infos = [1000.0], [], [entry()]
@@ -174,3 +237,36 @@ class PollTests(unittest.TestCase):
     def test_unknown_status_does_not_claim_charging(self):
         self.device(replies=[reply(status=0xFF)])
         self.assertFalse(self.provider.poll()[0].charging)
+
+    def poll_level(self, level):
+        self.clock[0] += 15
+        self.device(replies=[reply(level)])
+        return self.provider.poll()[0]
+
+    def test_rising_replies_propagate_estimate_and_drop_stops_it(self):
+        self.assertFalse(self.poll_level(77).charging)
+        self.assertFalse(self.poll_level(78).charging)
+        status = self.poll_level(79)
+        self.assertTrue(status.charging)
+        self.assertTrue(status.charging_estimated)
+        self.assertFalse(self.poll_level(78).charging)
+
+    def test_missing_reply_clears_trend_and_wake_needs_fresh_evidence(self):
+        for level in (77, 78, 79):
+            self.poll_level(level)
+        self.device()
+        status, = self.provider.poll()
+        self.assertFalse(status.charging)
+        self.assertFalse(status.online)
+        self.assertFalse(self.poll_level(85).charging)
+        self.assertFalse(self.poll_level(86).charging)
+        self.assertTrue(self.poll_level(87).charging)
+
+    def test_unplug_and_independent_receivers_do_not_reuse_trend(self):
+        for level in (77, 78, 79):
+            self.poll_level(level)
+        self.infos = [entry(path=b'second-receiver')]
+        self.assertFalse(self.poll_level(80).charging)
+        self.assertEqual(set(self.provider._trends), {N.device_key(b'second-receiver')})
+        self.infos = [entry()]
+        self.assertFalse(self.poll_level(85).charging)

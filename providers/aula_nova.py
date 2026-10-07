@@ -8,7 +8,10 @@ This is a different protocol from the F87 Pro's Compx receiver.
 
 Only interface 3, vendor collection FF60:0061, is queried. hidapi needs a
 zero report-id prefix on the 32-byte output, but returns 32-byte input frames.
-Charging/status bits are not decoded. No configuration commands are sent.
+No charging flag is known. Charging is estimated from two rising battery updates;
+it expires after five minutes without a further rise and resets on any drop,
+missing reading, unplugged receiver, long poll gap, or full battery.
+No configuration commands are sent.
 The OEM receiver match is not a unique hardware model identifier.
 """
 from __future__ import annotations
@@ -29,6 +32,42 @@ DEVICE_NAME = "AULA NOVA75"
 FRAME_LEN = 32
 TIMEOUT, READ_MS, DRAIN_LIMIT = 1.5, 100, 16
 ASLEEP_KEEP = 300.0
+CHARGE_RISES = 2
+CHARGE_WINDOW = 900.0       # the two increases must occur within 15 minutes
+CHARGE_HOLD = 300.0         # maximum stale charging indication after the last rise
+CHARGE_MAX_GAP = 600.0      # do not infer a charge that happened while unobserved
+
+
+class ChargingTrend:
+    """Bounded, per-receiver estimate using current, valid battery replies only."""
+
+    def __init__(self, level: int, now: float):
+        self.reset(level, now)
+
+    def reset(self, level: int, now: float):
+        self.level, self.seen = level, now
+        self.start_level, self.start_time = level, now
+        self.rises, self.last_rise, self.charging = 0, None, False
+
+    def update(self, level: int, now: float) -> bool:
+        if now < self.seen or now - self.seen > CHARGE_MAX_GAP or level < self.level or level >= 100:
+            self.reset(level, now)
+            return False
+        # A fresh rise can maintain the estimate even with the five-minute poll
+        # setting. Equal readings cannot extend it; once cleared, two new rises
+        # are needed to resume.
+        if self.charging and level == self.level and now - self.last_rise >= CHARGE_HOLD:
+            self.reset(self.level, self.seen)
+        if level > self.level:
+            if not self.rises or now - self.start_time > CHARGE_WINDOW:
+                self.start_level, self.start_time = self.level, self.seen
+                self.rises = 0
+            self.rises += 1
+            self.last_rise = now
+            if self.rises >= CHARGE_RISES and level - self.start_level >= CHARGE_RISES:
+                self.charging = True
+        self.level, self.seen = level, now
+        return self.charging
 
 
 def battery_request() -> List[int]:
@@ -65,6 +104,7 @@ class AulaNovaProvider(Provider):
     def __init__(self):
         self._diag: List[str] = []
         self._last: Dict[str, Tuple[int, float]] = {}
+        self._trends: Dict[str, ChargingTrend] = {}
 
     def _read(self, path) -> Optional[int]:
         dev = hid.device()
@@ -87,7 +127,6 @@ class AulaNovaProvider(Provider):
                 level = parse_battery(reply)
                 if level is not None:
                     self._diag.append(f"    battery reply: {hexdump(reply)}")
-                    self._diag.append(f"    {level}% (charging unknown)")
                     return level
             self._diag.append("    no valid battery reply (off, asleep, or unsupported)")
         except (OSError, ValueError) as e:
@@ -105,6 +144,7 @@ class AulaNovaProvider(Provider):
             infos = hidlist.enumerate(VID)
         except Exception as e:  # pragma: no cover
             log.warning("hid.enumerate(aula_nova): %s", e)
+            self._trends.clear()
             return []
         present, out = set(), []
         for info in infos:
@@ -120,9 +160,22 @@ class AulaNovaProvider(Provider):
             now = time.monotonic()
             if level is not None:
                 self._last[key] = (level, now)
-                out.append(DeviceStatus(key, DEVICE_NAME, level, False, True,
-                                        self.name, kind="keyboard"))
-            elif key in self._last:
+                trend = self._trends.get(key)
+                if trend is None:
+                    trend = self._trends[key] = ChargingTrend(level, now)
+                was_charging = trend.charging
+                charging = trend.update(level, now)
+                self._diag.append(f"    {level}% (charging estimated from battery trend: "
+                                  f"{'charging' if charging else 'not detected'}; "
+                                  f"{trend.rises} rising update(s))")
+                if charging != was_charging:
+                    log.info("[AULA NOVA75] charging estimate %s at %d%% [%s]",
+                             'started' if charging else 'stopped', level, key)
+                out.append(DeviceStatus(key, DEVICE_NAME, level, charging, True,
+                                        self.name, kind="keyboard", charging_estimated=True))
+            else:
+                self._trends.pop(key, None)
+            if level is None and key in self._last:
                 last_level, seen = self._last[key]
                 if now - seen < ASLEEP_KEEP:
                     self._diag.append(f"    keeping last {last_level}% greyed out")
@@ -133,6 +186,9 @@ class AulaNovaProvider(Provider):
         for key in list(self._last):
             if key not in present:
                 del self._last[key]
+        for key in list(self._trends):
+            if key not in present:
+                del self._trends[key]
         return out
 
     def diagnostics(self) -> List[str]:

@@ -36,14 +36,14 @@ class ProtocolTests(unittest.TestCase):
     def test_provider_identity_and_offline(self):
         info = dict(product_id=B.PID, usage_page=0xff00, interface_number=3, path=b'path', serial_number='test')
         p = B.BarracudaXProvider()
-        with mock.patch.object(B.hidlist, 'enumerate', return_value=[info]), mock.patch.object(B, 'read_voltage', side_effect=[3759, None]):
+        with mock.patch.object(B.hidlist, 'enumerate', return_value=[info]), mock.patch.object(B, 'read_battery', side_effect=[(3759, False), (None, False)]):
             status, = p.poll()
             self.assertEqual((status.level, status.kind, status.source), (22, 'headset', 'barracuda_x'))
             self.assertTrue(status.approx.startswith('~22%'))
             offline, = p.poll()
             self.assertFalse(offline.online)
             self.assertIsNone(offline.level)
-        with mock.patch.object(B.hidlist, 'enumerate', return_value=[dict(info, product_id=0x053a)]), mock.patch.object(B, 'read_voltage') as read:
+        with mock.patch.object(B.hidlist, 'enumerate', return_value=[dict(info, product_id=0x053a)]), mock.patch.object(B, 'read_battery') as read:
             self.assertEqual(p.poll(), [])
             read.assert_not_called()
 
@@ -54,6 +54,57 @@ class ProtocolTests(unittest.TestCase):
         with mock.patch.object(B.time, 'sleep'):
             self.assertIsNone(B.Session(dev).query(6, (1, 0, 49)))
         self.assertEqual(dev.write.call_count, 5)
+
+
+class ChargingTests(unittest.TestCase):
+    # Same local unit, user-confirmed cable states on 2026-10-08.
+    CHARGING = [3837, 3840, 3870, 4110, 4107, 4098, 4077]
+    UNPLUGGED = [3762, 3762, 3762, 3762, 3765, 3762, 3765]
+
+    def read_samples(self, samples):
+        replies = [b'\0'] + [b'\0' + mv.to_bytes(2, 'little') if mv is not None else None
+                              for mv in samples] + [b'\0']
+        diag = []
+        with mock.patch.object(B.hid, 'device') as dev, \
+                mock.patch.object(B.Session, 'query', side_effect=replies) as query, \
+                mock.patch.object(B.time, 'sleep'):
+            reading = B.read_battery(b'path', diag)
+            self.assertEqual(query.call_args, mock.call(14, (2, 225, 0)))
+            dev.return_value.close.assert_called_once()
+        return reading, diag
+
+    def test_captured_cable_states_and_minimum_voltage(self):
+        self.assertEqual(self.read_samples(self.CHARGING)[0], (3837, True))
+        self.assertEqual(self.read_samples(self.UNPLUGGED)[0], (3762, False))
+
+    def test_incomplete_invalid_or_missing_samples_do_not_claim_charging(self):
+        for samples in ([None] * 7, [4200] + [None] * 6,
+                        [3762, 65535, 4110, 3762, 3762, 3762, 3762]):
+            with self.subTest(samples=samples):
+                self.assertFalse(self.read_samples(samples)[0][1])
+
+    def test_full_charge_voltage_and_thresholds(self):
+        self.assertTrue(B.charging_from_samples([4180] * 7))
+        self.assertFalse(B.charging_from_samples([4179] * 7))
+        self.assertFalse(B.charging_from_samples([3762] * 6 + [3773]))
+        self.assertTrue(B.charging_from_samples([3762] * 6 + [3774]))
+
+    def test_query_error_restores_local_routing(self):
+        with mock.patch.object(B.hid, 'device'), \
+                mock.patch.object(B.Session, 'query', side_effect=[b'\0', OSError('read'), b'\0']) as query:
+            self.assertEqual(B.read_battery(b'path', []), (None, False))
+            self.assertEqual(query.call_args, mock.call(14, (2, 225, 0)))
+
+    def test_provider_clears_charging_after_unplug_and_lost_link(self):
+        info = dict(product_id=B.PID, usage_page=0xff00, interface_number=3,
+                    path=b'path', serial_number='test')
+        p = B.BarracudaXProvider()
+        with mock.patch.object(B.hidlist, 'enumerate', return_value=[info]), \
+                mock.patch.object(B, 'read_battery', side_effect=[(3837, True), (3762, False), (None, False)]):
+            states = [p.poll()[0] for _ in range(3)]
+        self.assertEqual([s.charging for s in states], [True, False, False])
+        self.assertTrue(all(s.charging_estimated for s in states))
+        self.assertFalse(states[-1].online)
 
 if __name__ == '__main__':
     unittest.main()
