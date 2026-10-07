@@ -535,6 +535,10 @@ class _Style:
         return g if self.icon_family else FALLBACK_GLYPHS[g]
 
 
+class LiveItem(Item):
+    """A text/status row refreshed while its flyout is open."""
+
+
 class _Row:
     def __init__(self, kind: str, item=None):
         self.kind = kind            # "item", "sep", "counter" or "header"
@@ -1016,6 +1020,8 @@ class FlyoutHost:
         self._poll_id = None
         if not self.panels:
             return
+        for panel in self.panels:
+            panel.refresh_live_rows()
         w = self._w
         if w is not None:
             x, y = w.cursor()
@@ -1154,6 +1160,28 @@ class _Panel:
                 except Exception:
                     pass
         self.overlay = self.win = self.catcher = None
+
+    def refresh_live_rows(self):
+        changed = False
+        for row in self.rows:
+            if isinstance(row.item, LiveItem):
+                text, enabled = str(row.item.text), bool(row.item.enabled)
+                if (text, enabled) != (row.text, row.enabled):
+                    row.text, row.enabled = text, enabled
+                    changed = True
+        if changed:
+            width, height = layout(self.rows, self.style, self.style.font.measure,
+                                   lambda g: self._glyph_font(g).measure(g))
+            # Keep enough room for the longest progress text without shrinking.
+            self.w, self.h = max(self.w, width), height
+            left, top, right, bottom = self.work
+            self.x = max(left, min(self.x, right - self.w))
+            self.y = max(top, min(self.y, bottom - self.h))
+            for window in (self.win, self.catcher):
+                if window is not None:
+                    window.geometry(f"{self.w}x{self.h}+{self.x}+{self.y}")
+            self.draw()
+            self.update_highlight()
 
     # ---------------- drawing
     def draw(self) -> None:

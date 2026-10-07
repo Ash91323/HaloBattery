@@ -70,6 +70,31 @@ class UpdaterTests(unittest.TestCase):
                         with self.assertRaises(ValueError):
                             U.download("https://github.com/x", expected, size, Path(folder) / "zip")
 
+    def test_progress_reports_partial_chunks_and_completion(self):
+        content = b"x" * 150000
+        response = io.BytesIO(content)
+        response.geturl = lambda: "https://github.com/x"
+        events = []
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(U.urllib.request, "urlopen", return_value=response):
+            U.download("https://github.com/x", hashlib.sha256(content).hexdigest(), len(content),
+                       Path(folder) / "zip", progress=lambda done, total: events.append((done, total)))
+        self.assertEqual(events[0], (0, len(content)))
+        self.assertEqual(events[-1], (len(content), len(content)))
+        self.assertTrue(any(0 < done < len(content) for done, _ in events))
+        self.assertEqual(events, sorted(events))
+
+    def test_progress_text_in_same_live_menu_row(self):
+        app = make_app()
+        app.update = ("1.15.0", "https://github.com/x")
+        app._update_busy = True
+        row = next(item for item in app.build_menu(None).items if isinstance(item, hb.flyout.LiveItem))
+        self.assertEqual(row.text, "Connecting to update server...")
+        app._on_update_progress(12000000, 20000000)
+        self.assertEqual(row.text, "Downloading 60% (12.0 / 20.0 MB)")
+        self.assertFalse(row.enabled)
+        app._on_update_progress(20000000, 20000000)
+        self.assertEqual(row.text, "Download complete; preparing installation...")
+
     def test_release_asset_is_bound_to_repo_version_and_digest(self):
         url = f"https://github.com/{U.updates.REPO}/releases/download/v1.15.0/HaloBattery-1.15.0.zip"
         asset = dict(name="HaloBattery-1.15.0.zip", state="uploaded", size=100,

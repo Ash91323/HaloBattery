@@ -8,6 +8,9 @@ LANGUAGES = ("auto", "en", "zh-TW")
 _language = "en"
 
 ZH_TW = {
+    "Connecting to update server...": "正在連線至更新伺服器…",
+    "Download complete; preparing installation...": "下載完成，正在準備安裝…",
+    "Downloading {percent}% ({done:.1f} / {total:.1f} MB)": "正在下載 {percent}%（{done:.1f} / {total:.1f} MB）",
     'Version {version} is available. Right-click a battery icon and choose "Install v{version} and restart…".':
         '已有新版本 {version}。請在電量圖示上按右鍵，選擇「安裝 v{version} 並重新啟動…」。',
     "Install v{version} and restart…": "安裝 v{version} 並重新啟動…",

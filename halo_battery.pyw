@@ -987,7 +987,15 @@ class App:
 
         def update_text(_item):
             if getattr(self, "_update_busy", False):
-                return tr("Downloading and preparing update…")
+                progress = getattr(self, "_update_progress", None)
+                if progress is not None:
+                    done, total = progress
+                    if done >= total:
+                        return tr("Download complete; preparing installation...")
+                    return tr("Downloading {percent}% ({done:.1f} / {total:.1f} MB)",
+                              percent=done * 100 // total, done=done / 1000000,
+                              total=total / 1000000)
+                return tr("Connecting to update server...")
             if self.update and getattr(sys, "frozen", False):
                 return tr("Install v{version} and restart…", version=self.update[0])
             return tr("Download v{version}…", version=self.update[0]) if self.update else tr("Download update…")
@@ -1098,7 +1106,7 @@ class App:
         return Menu(
             flyout.HeaderItem(header_title, header_detail,
                               edit=(lambda icon: self.rename(owner)) if owner is not None else None),
-            Item(update_text, lambda i, it: self.open_update(),
+            flyout.LiveItem(update_text, lambda i, it: self.open_update(),
                  enabled=lambda it: not getattr(self, "_update_busy", False),
                  visible=lambda it: self.update is not None),
             *device_items,
@@ -1821,6 +1829,8 @@ class App:
                 if getattr(self, "_update_busy", False):
                     return
                 self._update_busy = True
+                self._update_progress = None
+                self._update_progress_time = 0.0
                 version = self.update[0]
             self.refresh_menus()
             threading.Thread(target=self._install_update, args=(version,), daemon=True).start()
@@ -1832,9 +1842,17 @@ class App:
         except Exception as e:
             log.warning("open %s: %s", url, e)
 
+    def _on_update_progress(self, done: int, total: int) -> None:
+        self._update_progress = (done, total)
+        now = time.monotonic()
+        if done == 0 or done == total or now - getattr(self, "_update_progress_time", 0) >= 0.5:
+            self._update_progress_time = now
+            self.refresh_menus()
+
     def _install_update(self, version: str) -> None:
         try:
-            work = updater.prepare(version, VERSION, sys.executable, self.cfg.get("language", "auto"))
+            work = updater.prepare(version, VERSION, sys.executable, self.cfg.get("language", "auto"),
+                                   progress=self._on_update_progress)
             # If Exit was clicked while downloading, do not restart the app later.
             if self.stop_evt.is_set():
                 return
@@ -1846,6 +1864,7 @@ class App:
                             "Update failed")
         finally:
             self._update_busy = False
+            self._update_progress = None
             self.refresh_menus()
 
     def update_loop(self):

@@ -53,16 +53,18 @@ def read_release(version):
     return expected_url, digest[7:].lower(), asset["size"]
 
 
-def download(url, digest, size, destination):
+def download(url, digest, size, destination, progress=None):
     req = urllib.request.Request(url, headers={"User-Agent": "HaloBattery"})
     sha, count = hashlib.sha256(), 0
+    if progress:
+        progress(0, size)
     with urllib.request.urlopen(req, timeout=60) as response, open(destination, "wb") as output:
         final = urlparse(response.geturl())
         if final.scheme != "https" or not (final.hostname == "github.com" or
                 (final.hostname or "").endswith(".githubusercontent.com")):
             raise ValueError("Unexpected update download host")
         while True:
-            block = response.read(1024 * 1024)
+            block = response.read1(64 * 1024)
             if not block:
                 break
             count += len(block)
@@ -70,6 +72,8 @@ def download(url, digest, size, destination):
                 raise ValueError("Update exceeds expected download size")
             output.write(block)
             sha.update(block)
+            if progress:
+                progress(count, size)
     if count != size or sha.hexdigest() != digest:
         raise ValueError("Update SHA-256 or size does not match GitHub")
 
@@ -125,7 +129,7 @@ def launch(executable, *args):
                             creationflags=0x08000000 if sys.platform == "win32" else 0)
 
 
-def prepare(version, current, executable, language):
+def prepare(version, current, executable, language, progress=None):
     if not updates.is_newer(version, current):
         raise ValueError("Update must be newer than the running version")
     executable = Path(executable).resolve()
@@ -139,7 +143,7 @@ def prepare(version, current, executable, language):
     work = Path(tempfile.mkdtemp(prefix="HaloBattery-update-"))
     try:
         archive = work / "release.zip"
-        download(url, digest, size, archive)
+        download(url, digest, size, archive, progress=progress)
         extract_package(archive, work / "package")
         archive.unlink()
         runner = work / "runner"
