@@ -240,6 +240,49 @@ This identifies AULA F87 PRO without a saved Rename preference. F87's mapping
 comes from the official driver; its battery exchange has not been hardware-tested.
 Other AULA models are not inferred from this receiver id.
 
+### AULA NOVA75
+
+**Connection:** 2.4 GHz receiver `05AC:024F`, product `2.4G Dongle`, interface 3,
+vendor collection `FF60:0061`. This is separate from the F87 Pro Compx protocol.
+The provider requires all these fields; it does not query keyboard input
+collections, interface 4 (`FF59:0061`), USB cable, or Bluetooth.
+
+Receiver matching comes from `config.xml` in the NOVA75 **Beta 1.0.0.2** driver
+on [AULA's official download page](https://www.aulastar.com/drive/list_28_8/)
+([driver download](https://www.aulastar.com/index.php?a=custom_download_file&aid=901&c=View&field=d326AwgBU1YFA1MCCAwEVAIHUFcFUAYGUQMGAQhQQgpGA0c&lang=&m=home)).
+The installer was extracted without executing it or its firmware updater.
+Installer SHA-256: `901e856640b6dbffc80cfc2f90725773db05c76d4ffdc294e0774a3341d60da7`.
+`DeviceDriver.exe` SHA-256: `5fe9b33dba6f6514ee93c40c779cd4d3de51910baa7f9db7277b94b96ea19469`.
+
+Battery command source: [`WirelessAulaDevice.swift`, `sendBatteryQuery` and
+`BatteryInputPipe`](https://github.com/VitalyArt/Aula-F75-Max-Driver/blob/9f5d09a9412c73a3a21efdd56559325613dfe371/Sources/AulaF75MaxDriver/WirelessAulaDevice.swift).
+The 32-byte output frame starts `20 01`, followed by zeros, with the byte sum
+modulo 256 at offset 31 (`21`). Windows hidapi requires an additional zero
+report-id prefix, so `write()` receives 33 bytes. Input is exactly 32 bytes:
+`20 01`, an undecoded status byte, battery percentage at offset 3, and the
+checksum at offset 31. No initialization or configuration writes are needed.
+
+**Confirmed on the user's NOVA75 on Windows**, 2026-10-07:
+
+```text
+request (including hidapi report-id prefix):
+00 20 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 21
+reply:
+20 01 00 4D 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 6E
+```
+
+The reply reports **77%**; it has not been compared with the OEM app.
+Only complete, checksummed replies with a percentage from 0 to 100 are accepted.
+A byte-for-byte request echo is ignored: an all-zero payload cannot distinguish
+an echo from 0%, so that ambiguous frame supplies no reading. Unrelated and
+stale frames are discarded within bounded drain/read loops. Charging is unknown.
+A sleeping keyboard retains its last value greyed out for five minutes; unplugging
+the receiver clears it immediately.
+
+The displayed NOVA75 name follows the official driver's receiver match, not a
+unique model query. Other keyboards may share these generic receiver descriptors;
+this match does not establish their model or claim support for them.
+
 ### Keychron Ultra-Link 8K, Keychron M5
 
 **Connection:** 2.4 GHz receiver (3434:D028) and USB cable (3434:D048)

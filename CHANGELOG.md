@@ -7,6 +7,10 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- AULA NOVA75 battery level over its `05AC:024F` 2.4 GHz receiver, confirmed
+  on hardware at 77%. Uses a separate 32-byte protocol from F87 Pro, with a
+  keyboard tray icon, low battery alerts, a device-type preference, and a
+  five-minute greyed-out last reading when asleep. Charging is not decoded.
 - AULA F87 Pro battery level over its Compx 2.4 GHz receiver (`3554:FA09`),
   confirmed on hardware at 95%. The keyboard gets its own tray icon and works
   with Percentage in the icon and low battery alerts. The model is identified

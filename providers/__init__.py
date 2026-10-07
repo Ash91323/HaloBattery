@@ -25,3 +25,4 @@ from .corsair import CorsairProvider  # noqa: F401
 from .lamzu import LamzuProvider  # noqa: F401
 from .am_infinity import AmInfinityProvider  # noqa: F401
 from .aula import AulaProvider  # noqa: F401
+from .aula_nova import AulaNovaProvider  # noqa: F401

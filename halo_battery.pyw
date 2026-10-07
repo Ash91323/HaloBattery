@@ -93,7 +93,7 @@ import updates  # noqa: E402
 import winevents  # noqa: E402
 from providers import hidlist  # noqa: E402
 from providers import (AmInfinityProvider, AstroProvider, AsusProvider,  # noqa: E402
-                       AudezeProvider, AulaProvider, BarracudaProvider, BluetoothProvider, CorsairProvider, DeviceStatus,
+                       AudezeProvider, AulaProvider, AulaNovaProvider, BarracudaProvider, BluetoothProvider, CorsairProvider, DeviceStatus,
                        EightBitDoProvider,
                        GWolvesProvider, HyperXAlpha2Provider, HyperXCloud3Provider, HyperXProvider, JblProvider,
                        KeychronProvider, LamzuProvider, LofreeProvider, LogitechProvider,
@@ -139,6 +139,7 @@ PROVIDER_LABELS = {
     "asus": "ASUS ROG / TUF mice",
     "audeze": "Audeze Maxwell",
     "aula": "AULA / Compx keyboards",
+    "aula_nova": "AULA NOVA75",
     "barracuda": "Razer Barracuda Pro",
     "corsair": "Corsair headsets",
     "gwolves": "G-Wolves mice",
@@ -168,7 +169,7 @@ def make_providers() -> list:
             JblProvider(), LogitechProvider(), SteelSeriesProvider(), XInputProvider(),
             PlayStationProvider(), EightBitDoProvider(), BarracudaProvider(), NintendoProvider(),
             AsusProvider(), GWolvesProvider(), LofreeProvider(), AstroProvider(), CorsairProvider(),
-            LamzuProvider(), AmInfinityProvider(), AulaProvider()]
+            LamzuProvider(), AmInfinityProvider(), AulaProvider(), AulaNovaProvider()]
 
 
 # ---------------------------------------------------------------- config
