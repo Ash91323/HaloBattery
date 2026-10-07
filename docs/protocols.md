@@ -360,3 +360,22 @@ The level Windows itself knows (`DEVPKEY_Bluetooth_Battery`). Only devices conne
 **Connection:** Lightspeed, Unifying or Bolt receiver
 
 The provider reads HID++ 2.0 generically from the receiver's `ff00` vendor collections (slots 1-6), so most other HID++ 2.0 mice and keyboards on a Lightspeed, Unifying or Bolt receiver should answer the same `0x1004` unified battery request. The G-series headsets - G533, G535, G633, G635, G733, G933, G935, G PRO, G PRO X - are in the headset pid table and use feature `0x1F20` (the G535 on its consumer collection). Only the models listed in the support table above are confirmed so far.
+
+
+## Razer Barracuda X (2022, YS-Tech 2.4 GHz)
+
+Receiver `1532:0550`, HID interface 3, vendor usage page `FF00`.
+This uses report ID 2 with YS-Tech CRC-16/XMODEM framing, not the Pro
+report layout or the generic Razer feature protocol. Remote route E1 01,
+RACE family 06 GET_BATTERY 31, and finally E1 00 to restore local routing.
+Writes require an input-report O acknowledgement (F retries are bounded).
+Replies must match the RACE family and transaction sequence.
+
+Local hardware returned `02 11 50 49 01 d8 fb f2 10 00 07 00 06 82 00 af 0e 00 00`:
+3759 mV. The tray labels the voltage-derived level as approximate (`~22%`).
+The Li-ion curve is only an estimate, especially while connected to a charger;
+this provider does not infer charging from voltage. No response gives an unknown,
+offline state; no stale level is passed off as current. Only PID 0550 is enabled.
+
+Protocol and approximate discharge curve reference:
+https://github.com/mehdibouchami/razer-barracuda-x-battery/blob/main/src/Protocol.cs

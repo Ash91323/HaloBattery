@@ -343,10 +343,10 @@ class RazerProvider(Provider):
             if not maybe_wireless(pid, name):
                 self._diag.append("  skipped: not a known wireless device")
                 continue
-            if pid == 0x053A:
-                # The Barracuda Pro's receiver does not answer the mouse request this
+            if pid in (0x053A, 0x0550):
+                # The Barracuda Pro and X receivers do not answer the mouse request this
                 # provider sends; it speaks the headset "PA" protocol instead, which
-                # providers/barracuda.py reads.
+                # providers/barracuda.py and barracuda_x.py read.
                 self._diag.append("  skipped: read by the barracuda provider (own PA protocol)")
                 continue
             is_headset = pid in blackshark.PA_PIDS or "blackshark" in name.lower()

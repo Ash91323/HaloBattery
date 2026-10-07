@@ -26,3 +26,5 @@ from .lamzu import LamzuProvider  # noqa: F401
 from .am_infinity import AmInfinityProvider  # noqa: F401
 from .aula import AulaProvider  # noqa: F401
 from .aula_nova import AulaNovaProvider  # noqa: F401
+
+from .barracuda_x import BarracudaXProvider  # noqa: F401
