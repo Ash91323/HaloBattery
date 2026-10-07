@@ -184,6 +184,105 @@ Feature request `02 02 00 83`; if there is no reply, the mouse heartbeat is used
 
 ## Mice and keyboards
 
+### AULA F87 Pro
+
+**Connection:** Compx 2.4 GHz receiver (`3554:FA09`), vendor collection `FF02:0002`.
+
+The receiver accepts a 20-byte output report, report id `0x13`. Battery command
+`0x4A`, operation 0 (read), is `13 4A 01 00 00` followed by fourteen zeros and
+checksum `5E`. The matching reply has one packet, index 0 and two payload bytes:
+byte 5 is the percentage and byte 6 is an undecoded status byte. Byte 19 is the
+sum of bytes 0 through 18, modulo 256. Report id, command, fragment fields,
+payload length, checksum and the 0..100 range must all match. Other reports,
+request echoes and error replies are ignored within a bounded wait.
+
+Source: [deepan-alve/womier-l65-linux, `WirelessTransport._packet` and
+`WirelessTransport.battery`](https://github.com/deepan-alve/womier-l65-linux/blob/main/linux/l65ctl.py#L185-L293).
+**Confirmed on an AULA F87 Pro on Windows**, 2026-10-02: the reply
+`13 4A 01 00 02 5F 01 00 00 00 00 00 00 00 00 00 00 00 00 C0` reports 95%.
+This confirms a device-reported level; it has not been compared with the OEM app.
+
+Only that vendor collection and receiver id are queried, with no configuration
+or firmware writes. No wired or Bluetooth protocol is claimed here. A nonzero
+status byte is not enough to infer charging, so charging is not shown. An
+unresponsive keyboard keeps its last level greyed out for at most five minutes;
+unplugging the receiver clears it. Receivers have separate icon keys derived
+from their HID paths (stable across restarts on the same USB port).
+
+The shared USB id and product string do not identify the keyboard. After each
+successful battery read, command `0x05` asks for the model's full six-byte `Psd`:
+`13 05 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 19`.
+Only checksummed, single-packet replies with six or ten payload bytes are accepted.
+The first six payload bytes select a name; the extra four bytes in the observed
+ten-byte response are not interpreted. Unknown ids or a failed model query use
+"AULA / Compx keyboard" and still show a valid battery. The query runs again on
+each successful poll so changing the keyboard paired to a receiver cannot retain
+a previously identified model. A sleeping device keeps its last name with its
+greyed-out reading until expiry or unplugging.
+
+Model source: the **F87/F87 Pro** download on [AULA's driver page](https://www.aulagaming.com/pages/download),
+[AULA_F87_Software.exe](https://cdn.shopify.com/s/files/1/0695/6987/1965/files/AULA_F87_Software.exe?v=1756176168),
+extracted without running the installer or firmware updater. Installer SHA-256:
+`a91db0e84dd6e677aaa1701a6c4851e71131b561815909aacfc6f8679d20fdee`.
+`OemDrv.exe` SHA-256: `c46e6cad5ad85addbaef4975d27721719aa567bcb27582312b797a7108ec5a38`.
+At `0040BC25..0040BC2F`, its wireless watcher calls `SendCMD_3632` (`00484530`)
+with report id `0x13`, command `0x05`, and an output buffer of six bytes.
+Its `Dev/kb/*/KB.ini` files supply these exact hexadecimal mappings:
+
+| Full Psd | Name | Driver configuration |
+|---|---|---|
+| `03 00 00 00 00 8F` | AULA F87 | `Dev/kb/1/KB.ini` |
+| `03 00 00 00 01 0B` | AULA F87 PRO | `Dev/kb/F87PRO/KB.ini` |
+
+**Confirmed on the user's F87 PRO**, 2026-10-02:
+`13 05 01 00 0A 03 00 00 00 01 0B 01 00 00 00 00 00 00 00 33`.
+This identifies AULA F87 PRO without a saved Rename preference. F87's mapping
+comes from the official driver; its battery exchange has not been hardware-tested.
+Other AULA models are not inferred from this receiver id.
+
+### AULA NOVA75
+
+**Connection:** 2.4 GHz receiver `05AC:024F`, product `2.4G Dongle`, interface 3,
+vendor collection `FF60:0061`. This is separate from the F87 Pro Compx protocol.
+The provider requires all these fields; it does not query keyboard input
+collections, interface 4 (`FF59:0061`), USB cable, or Bluetooth.
+
+Receiver matching comes from `config.xml` in the NOVA75 **Beta 1.0.0.2** driver
+on [AULA's official download page](https://www.aulastar.com/drive/list_28_8/)
+([driver download](https://www.aulastar.com/index.php?a=custom_download_file&aid=901&c=View&field=d326AwgBU1YFA1MCCAwEVAIHUFcFUAYGUQMGAQhQQgpGA0c&lang=&m=home)).
+The installer was extracted without executing it or its firmware updater.
+Installer SHA-256: `901e856640b6dbffc80cfc2f90725773db05c76d4ffdc294e0774a3341d60da7`.
+`DeviceDriver.exe` SHA-256: `5fe9b33dba6f6514ee93c40c779cd4d3de51910baa7f9db7277b94b96ea19469`.
+
+Battery command source: [`WirelessAulaDevice.swift`, `sendBatteryQuery` and
+`BatteryInputPipe`](https://github.com/VitalyArt/Aula-F75-Max-Driver/blob/9f5d09a9412c73a3a21efdd56559325613dfe371/Sources/AulaF75MaxDriver/WirelessAulaDevice.swift).
+The 32-byte output frame starts `20 01`, followed by zeros, with the byte sum
+modulo 256 at offset 31 (`21`). Windows hidapi requires an additional zero
+report-id prefix, so `write()` receives 33 bytes. Input is exactly 32 bytes:
+`20 01`, an undecoded status byte, battery percentage at offset 3, and the
+checksum at offset 31. No initialization or configuration writes are needed.
+
+**Confirmed on the user's NOVA75 on Windows**, 2026-10-07:
+
+```text
+request (including hidapi report-id prefix):
+00 20 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 21
+reply:
+20 01 00 4D 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 6E
+```
+
+The reply reports **77%**; it has not been compared with the OEM app.
+Only complete, checksummed replies with a percentage from 0 to 100 are accepted.
+A byte-for-byte request echo is ignored: an all-zero payload cannot distinguish
+an echo from 0%, so that ambiguous frame supplies no reading. Unrelated and
+stale frames are discarded within bounded drain/read loops. Charging is unknown.
+A sleeping keyboard retains its last value greyed out for five minutes; unplugging
+the receiver clears it immediately.
+
+The displayed NOVA75 name follows the official driver's receiver match, not a
+unique model query. Other keyboards may share these generic receiver descriptors;
+this match does not establish their model or claim support for them.
+
 ### Keychron Ultra-Link 8K, Keychron M5
 
 **Connection:** 2.4 GHz receiver (3434:D028) and USB cable (3434:D048)

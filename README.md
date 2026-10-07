@@ -23,6 +23,8 @@ Levels are read over USB/HID (a dongle, a receiver or a cable), from Xbox-style 
 | [Astro A50 Gen 5 (Logitech 046D:0B1C)](docs/protocols.md#astro-a50-gen-5-logitech-046d0b1c) | Base station | no |
 | [ASUS ROG Gladius III Aimpoint and other ROG / TUF wireless mice (list in `providers/asus.py`)](docs/protocols.md#asus-rog-gladius-iii-aimpoint-and-other-rog--tuf-wireless-mice) | 2.4 GHz receiver or USB cable | no |
 | [Audeze Maxwell](docs/protocols.md#audeze-maxwell) | 2.4 GHz dongle or USB-C cable | yes |
+| [AULA F87 Pro](docs/protocols.md#aula-f87-pro) | 2.4 GHz receiver (battery level and automatic model name; no charging state) | yes |
+| [AULA NOVA75](docs/protocols.md#aula-nova75) | 2.4 GHz receiver (battery level; no charging state) | yes |
 | [Bluetooth devices, tested on the 1MORE SonoFlow headset (users also report Audio-Technica and JBL Tune 760NC headphones working)](docs/protocols.md#bluetooth-devices-tested-on-the-1more-sonoflow-headset) | Bluetooth (on by default, can be turned off in the menu) | yes |
 | [Corsair Dark Core RGB Pro SE](docs/protocols.md#corsair-dark-core-rgb-pro-se) | 2.4 GHz dongle | no |
 | [Corsair Void v2 Wireless, Virtuoso Max Wireless, HS80 Max Wireless](docs/protocols.md#corsair-void-v2-wireless-virtuoso-max-wireless-hs80-max-wireless) | Wireless receiver | no |
@@ -113,6 +115,10 @@ Right-click a device icon to open its menu. It looks like a Windows 11 menu (acr
 - **Hide this device**: remove its icon, for example for a controller that always reports 100%.
 - **Refresh now**
 - **Preferences**:
+  - **Language**: follow the Windows display language, or choose **English** or
+    **繁體中文**. The choice is saved and applies immediately to menus and tooltips.
+    繁體中文：在「偏好設定 → 語言 → 繁體中文」切換介面語言。
+    Device names are preserved; technical diagnostics and logs remain in English.
   - **Poll interval** (15 s to 5 min) and **Low battery alert** (off, 10–30%): change them with the − and + buttons or the mouse wheel, the menu stays open
   - **Alert when fully charged** (a notification once per charge, on by default)
   - **Estimated time left**: "about 5 h of use left" in the tooltip, from how fast the device has drained since its last charge. Only time the device is awake and on battery counts, and there is no estimate until it has been used for 30 minutes and dropped 3%. The history is kept in `%APPDATA%\HaloBattery\history.json`.
@@ -123,11 +129,42 @@ Right-click a device icon to open its menu. It looks like a Windows 11 menu (acr
   - **Device types**: turn off a brand or device family; its devices are then not opened at all
   - **Icon colour**: Automatic (the Windows theme, or MyDockFinder's menu bar while it is running), White or Black
   - **Start with Windows** (per-user registry key, no admin rights needed)
-  - **Check for updates**: once a day, on by default; a notification and a **Download vX.Y.Z…** item appear when a new release is out
+  - **Check for updates**: checks this fork (`Ash91323/HaloBattery`) once a day.
+    A packaged Windows build offers **Install vX.Y.Z and restart…**: click to
+    download the ZIP, verify GitHub's SHA-256 digest, replace the application and
+    restart. Settings/history are preserved, including portable installations.
+    A failed replacement or early startup exit restores the old application.
+    Source runs open the release page instead. Nothing installs without a click.
 - **Hidden devices** (only when a device is hidden): click a device to show it again
 - **Diagnostics…**: writes a detailed report and opens it
 
 ## Troubleshooting
+
+### Personal releases
+
+Push to **`main`** to run `.github/workflows/release.yml`. GitHub Actions selects
+the next patch version above the source version and existing stable tags, runs
+the unit tests, builds `HaloBattery-<version>.zip`, and publishes a formal Release
+only after its ZIP and checksum file have uploaded. No manual tag or version edit
+is needed. Version changes happen in the build checkout; no bot commit is pushed.
+The Release notes record the source commit and the current Unreleased notes.
+
+For example, a `1.13.0` source with no newer tags produces `v1.13.1`; the next
+push produces `v1.13.2`. A failed workflow does not publish an update. Manual runs
+on `main` also release; other branches only produce downloadable workflow artifacts.
+Explicit `v*` tags still work if the source version and changelog match the tag.
+Actions must be enabled on the fork; the workflow uses its built-in `GITHUB_TOKEN`.
+
+The installed app checks only this fork's public stable Releases. It ignores
+drafts and prereleases. To recheck immediately, turn **Check for updates** off
+and back on. Installation requires the normal `HaloBattery.exe` + `_internal`
+folder layout and a writable installation folder. A `.halo-backup-*` directory
+retains the previous app files; `%TEMP%/HaloBattery-update-*` contains the detached
+installer, staged files and `result.txt`. After a successful update and after the
+helper has exited, these recovery folders can be removed if no longer needed.
+
+繁體中文：將變更 push 到 `main` 後，Actions 會自動遞增版本並發布。
+程式偵測到較新版本後，點「安裝 vX.Y.Z 並重新啟動…」即可更新。
 
 1. Close Synapse, the WLmouse web driver and other battery tools - they may hold the receiver.
 2. Wake the mouse up by moving it.

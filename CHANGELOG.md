@@ -6,6 +6,32 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Personal releases from `Ash91323/HaloBattery`: push to `main` automatically
+  selects the next patch version, runs tests, builds the Windows ZIP and publishes
+  a release. The packaged app can download, verify and install it from the tray,
+  restart automatically, and roll back a failed replacement/startup. Settings and
+  history are preserved. Cached upstream update notices are cleared on migration.
+- Traditional Chinese (`zh-TW`) interface, with a saved Language choice in
+  Preferences: Follow system, English, or 繁體中文. Switching updates tray menus
+  and tooltips immediately. Notifications, rename prompts, battery states and
+  remaining-time estimates are translated; device names remain unchanged.
+- AULA NOVA75 battery level over its `05AC:024F` 2.4 GHz receiver, confirmed
+  on hardware at 77%. Uses a separate 32-byte protocol from F87 Pro, with a
+  keyboard tray icon, low battery alerts, a device-type preference, and a
+  five-minute greyed-out last reading when asleep. Charging is not decoded.
+- AULA F87 Pro battery level over its Compx 2.4 GHz receiver (`3554:FA09`),
+  confirmed on hardware at 95%. The keyboard gets its own tray icon and works
+  with Percentage in the icon and low battery alerts. The model is identified
+  automatically using the official driver's read-only `0x05` model query and
+  full six-byte Psd mapping, distinguishing F87 PRO from F87 despite their shared
+  receiver id. F87 PRO identification is hardware-confirmed; the F87 mapping is
+  sourced from the official driver. Unknown or unreadable models retain the
+  generic "AULA / Compx keyboard" name. A sleeping keyboard keeps its last reading greyed
+  out for five minutes. Charging flags are not decoded, so no charging state
+  is claimed. The read-only battery exchange comes from
+  `deepan-alve/womier-l65-linux`, `linux/l65ctl.py`, `WirelessTransport.battery`.
+
 ## [1.13.0] - 2026-09-29
 
 A new Windows 11 style tray menu and a batch of tray features: turn device types off,

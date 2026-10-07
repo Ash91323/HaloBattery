@@ -22,6 +22,8 @@ import os
 import time
 from typing import Dict, List, Optional
 
+from i18n import tr
+
 MAX_GAP = 600.0          # s: the most one gap between two readings may add
 MIN_SPAN = 1800.0        # s of use since the charge before an estimate is given
 MIN_DROP = 3             # percentage points dropped since the charge, likewise
@@ -35,10 +37,10 @@ def format_left(seconds: float) -> str:
     """12600 -> 'about 4 h of use left'."""
     hours = seconds / 3600.0
     if hours < 1:
-        return "less than 1 h of use left"
+        return tr("less than 1 h of use left")
     if hours < 48:
-        return f"about {round(hours)} h of use left"
-    return f"about {round(hours / 24)} days of use left"
+        return tr("about {hours} h of use left", hours=round(hours))
+    return tr("about {days} days of use left", days=round(hours / 24))
 
 
 class History:

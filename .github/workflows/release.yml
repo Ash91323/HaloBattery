@@ -1,23 +1,19 @@
 name: Build and release
 
-# Push a tag like v1.8.0 and GitHub builds Halo Battery on a Windows runner and
-# attaches HaloBattery-<version>.zip (a HaloBattery folder with HaloBattery.exe
-# and its libraries) to the release for that tag (the release is created if it
-# does not exist yet). The release text is the matching section of CHANGELOG.md.
-# "Run workflow" on the Actions tab builds it without releasing; download it
-# from the run's artifacts.
-#
-# The app is built as a folder, not a single self-extracting .exe: a one-file
-# PyInstaller .exe unpacks Python into a temp folder at every start, which
-# antivirus machine-learning heuristics often flag as a trojan.
-
+# Pushes to main publish personal releases; no bot commits are created.
 on:
   push:
+    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: halo-personal-release
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   build:
@@ -25,30 +21,28 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
-      - name: Check that the tag matches VERSION
-        if: github.ref_type == 'tag'
-        shell: pwsh
-        run: |
-          $tag = "${{ github.ref_name }}".TrimStart("v")
-          $m = Select-String -Path halo_battery.pyw -Pattern '^VERSION = "(.+)"'
-          $ver = $m.Matches[0].Groups[1].Value
-          if ($ver -ne $tag) {
-            Write-Error "Tag v$tag does not match VERSION = `"$ver`" in halo_battery.pyw"
-            exit 1
-          }
-          Write-Host "Version $ver"
+      - name: Refresh release tags
+        run: git fetch --tags origin
+
+      - name: Prepare release version and notes
+        id: release
+        run: python tools/prepare_release.py
 
       - name: Install dependencies
         run: python -m pip install -r requirements.txt pyinstaller
 
+      - name: Unit tests
+        run: python -m unittest discover -s tests
+
       - name: Smoke test
-        # imports every module and runs one full poll on the runner (no devices there)
         run: python halo_battery.pyw --probe
 
       - name: Build HaloBattery
@@ -57,32 +51,42 @@ jobs:
           python tools/make_version.py version_info.txt
           python -m PyInstaller --noconfirm --onedir --windowed --noupx --name HaloBattery --icon halo.ico --version-file version_info.txt --hidden-import hid --hidden-import pystray._win32 halo_battery.pyw
 
-      - name: Zip the HaloBattery folder
-        id: zip
+      - name: Package Windows update
         shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: |
-          $m = Select-String -Path halo_battery.pyw -Pattern '^VERSION = "(.+)"'
-          $ver = $m.Matches[0].Groups[1].Value
-          $zip = "HaloBattery-$ver.zip"
+          $zip = "HaloBattery-$env:RELEASE_VERSION.zip"
           Compress-Archive -Path dist/HaloBattery -DestinationPath $zip
-          "zip=$zip" >> $env:GITHUB_OUTPUT
-          Write-Host "Built $zip"
+          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $zip" | Set-Content -LiteralPath "$zip.sha256" -Encoding ascii
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
-          name: HaloBattery
+          name: HaloBattery-${{ steps.release.outputs.version }}
           path: dist/HaloBattery
 
-      - name: Release notes from CHANGELOG.md
-        if: github.ref_type == 'tag'
-        # fails if CHANGELOG.md has no section for this version
-        run: python tools/release_notes.py ${{ github.ref_name }} --out release_notes.md
-
-      - name: Attach to release
-        if: github.ref_type == 'tag'
+      # Hide releases from the updater until all assets finish uploading.
+      - name: Upload draft release
+        if: steps.release.outputs.publish == 'true'
         uses: softprops/action-gh-release@v3
         with:
-          files: ${{ steps.zip.outputs.zip }}
+          tag_name: ${{ steps.release.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: HaloBattery ${{ steps.release.outputs.tag }}
+          draft: true
+          prerelease: false
+          files: |
+            HaloBattery-${{ steps.release.outputs.version }}.zip
+            HaloBattery-${{ steps.release.outputs.version }}.zip.sha256
           fail_on_unmatched_files: true
           body_path: release_notes.md
+
+      - name: Publish completed release
+        if: steps.release.outputs.publish == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: gh release edit "$env:RELEASE_TAG" --draft=false --latest --repo "$env:GITHUB_REPOSITORY"

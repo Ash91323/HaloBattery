@@ -38,6 +38,7 @@ import time
 from typing import Callable, List, Optional, Sequence, Tuple
 
 from pystray import Menu, MenuItem as Item
+import i18n
 
 log = logging.getLogger("halo_battery")
 
@@ -513,7 +514,9 @@ class _Style:
     def __init__(self, tk_font, root, families: set, scale: float, light: bool):
         self.scale = scale
         self.px = lambda v: max(1, round(v * scale))
-        text = next((f for f in TEXT_FONTS if f in families), "TkDefaultFont")
+        fonts = (("Microsoft JhengHei UI", "Microsoft JhengHei") + TEXT_FONTS
+                 if i18n.get_language() == "zh-TW" else TEXT_FONTS)
+        text = next((f for f in fonts if f in families), "TkDefaultFont")
         self.icon_family = next((f for f in ICON_FONTS if f in families), None)
         if text == "TkDefaultFont":
             self.font = tk_font.nametofont("TkDefaultFont").copy()
@@ -779,7 +782,7 @@ class FlyoutHost:
 
     # ---------------- opening and closing (tkinter thread from here on)
     def style(self, scale: float, light: bool) -> _Style:
-        key = (round(scale, 3), light)
+        key = (round(scale, 3), light, i18n.get_language())
         if key not in self._styles:
             self._styles[key] = _Style(self._font, self._root, self._families, scale, light)
         return self._styles[key]
